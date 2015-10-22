@@ -97,6 +97,7 @@ done < "${tmpfile2}"
 # Don't bother storing list if the payload is empty
 if (( count > 0 )); then
 	mv -- "${tmpfile2}" "${list_file}"
+	chmod 644 "${list_file}"
 else
 	rm -f -- "${list_file}"
 fi
