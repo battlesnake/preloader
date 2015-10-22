@@ -5,14 +5,25 @@ set -euo pipefail
 source "$(dirname "$0")/config"
 
 declare run_as_user=
+declare profile_name=
+declare -i run_in_foreground=0
 
 while true; do
 	case "$1" in
-	-u) shift; run_as_user="$1"; shift;;
+	-u) shift; run_as_user="$1";;
+	-n) shift; profile_name="$1";;
+	-f) run_in_foreground=1;;
 	--) shift; break;;
 	*) break;;
 	esac
+	shift
 done
+
+if [ -z "${profile_name}" ]; then
+	profile_name="$(basename "$1")"
+fi
+
+declare -r list_file="${base_dir}/lists/${profile_name}.list"
 
 declare -r tmpfile="$(mktemp)"
 declare -r tmpfile2="$(mktemp)"
@@ -21,28 +32,51 @@ function clean_tmp {
 }
 trap clean_tmp EXIT
 
-if [ "${run_as_user}" ]; then
-	echo "Running as user \"${run_as_user}\"..."
-	strace -f -e trace=open,access sudo sudo -u "${run_as_user}" "$@" 2> "${tmpfile}" &
+declare -ra args=( "$@" )
+
+# Run the program with strace
+if (( run_in_foreground )); then
+	echo "Running in foreground"
+	if [ "${run_as_user}" ]; then
+		echo "Running as user \"${run_as_user}\"..."
+		strace -f -e trace=open,access sudo sudo -u "${run_as_user}" "${args[@]}" 2> "${tmpfile}" || true
+	else
+		strace -f -e trace=open,access "${args[@]}" 2> "${tmpfile}" || true
+	fi
 else
-	strace -f -e trace=open,access "$@" 2> "${tmpfile}" &
+	echo "Running in background"
+	if [ "${run_as_user}" ]; then
+		echo "Running as user \"${run_as_user}\"..."
+		strace -f -e trace=open,access sudo sudo -u "${run_as_user}" "${args[@]}" 2> "${tmpfile}" &
+	else
+		strace -f -e trace=open,access "${args[@]}" 2> "${tmpfile}" &
+	fi
+	declare -ri strace_pid=$!
+	echo "Press <ENTER> when program has loaded (program will be killed)"
+	read
+	kill "${strace_pid}" &>/dev/null || true
 fi
-declare -ri strace_pid=$!
 
-echo "Press [ENTER] when done"
-read
-kill "${strace_pid}" &>/dev/null || true
+{
+# Store command line in a comment
+	printf -- "#"
+	for arg in "${args[@]}"; do
+		printf -- " '"
+		printf -- "%s" "${arg}" | sed -e "s/'/'\\''/g"
+		printf -- "'"
+	done
+	printf -- "\n"
+# Build file list from strace output
+	perl <(glue_prog) "${tmpfile}" | xargs -I{} readlink -m {} | sort -u
+} > "${tmpfile2}"
 
-perl <(glue_prog) "${tmpfile}" \
-| xargs -I{} readlink -m {} \
-| sort -u \
-> "${tmpfile2}"
-
-declare base="$(basename "$1")"
-
+# Calculate payload size
 declare -i total=0
 declare -i count=0
 while read file; do
+	if [ "${file:0:1}" == "#" ]; then
+		continue
+	fi
 	if [ -d "${file}" ]; then
 #		printf >&2 -- "Excluding directory %s\n" "${file}"
 		continue
@@ -60,7 +94,11 @@ while read file; do
 	count+=1
 done < "${tmpfile2}"
 
+# Don't bother storing list if the payload is empty
 if (( count > 0 )); then
-	mv -- "${tmpfile2}" "${base_dir}/lists/${base}.list"
+	mv -- "${tmpfile2}" "${list_file}"
+else
+	rm -f -- "${list_file}"
 fi
+
 printf >&2 -- "%d files, %dMB total\n" "${count}" "$((total / 1048576))"

@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 source "$(dirname "$0")/config"
 
 function get_payload {
-	cat -- "${list_dir}"/*.list | sort -u
+	cat -- "${list_dir}"/*.list | grep -vE '^#' | sort -u
 }
 
 function calc_size {
