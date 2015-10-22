@@ -17,7 +17,6 @@ exit
 
 struct t_mapping
 {
-	int fd;
 	void *ptr;
 	size_t size;
 };
@@ -27,7 +26,7 @@ mapping *ptrs = 0;
 size_t n_ptrs = 0;
 size_t c_ptrs = 0;
 
-void push_ptr(int fd, void *ptr, size_t size)
+void push_ptr(void *ptr, size_t size)
 {
 	size_t alloc_by = 256;
 	if (ptrs == 0) {
@@ -38,12 +37,11 @@ void push_ptr(int fd, void *ptr, size_t size)
 		c_ptrs += alloc_by;
 	}
 	mapping *this = &ptrs[n_ptrs++];
-	this->fd = fd;
 	this->ptr = ptr;
 	this->size = size;
 }
 
-int preload(char *path)
+int preload(char *path, size_t *size)
 {
 	int file = open(path, O_RDONLY);
 	struct stat statrec;
@@ -60,7 +58,9 @@ int preload(char *path)
 		close(file);
 		return 3;
 	}
-	push_ptr(file, map, statrec.st_size);
+	close(file);
+	push_ptr(map, statrec.st_size);
+	*size = statrec.st_size;
 	return 0;
 }
 
@@ -68,7 +68,6 @@ void unload()
 {
 	for (size_t i = 0; i < n_ptrs; i++) {
 		munmap(ptrs[i].ptr, ptrs[i].size);
-		close(ptrs[i].fd);
 	}
 }
 
@@ -87,23 +86,50 @@ int main(int argc, char *argv[])
 	memset(&action, 0, sizeof(action));
 	action.sa_handler = sigterm;
 	sigaction(SIGTERM, &action, NULL);
+	sigaction(SIGINT, &action, NULL);
+
+	int verbose = 0;
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-v") == 0) {
+			verbose = 1;
+		}
+	}
+
+	size_t total = 0;
+	unsigned long attempted = 0;
+	unsigned long loaded = 0;
 
 	char line[linebuf];
 	while (!end && fgets(line, linebuf, stdin)) {
 		/* \n -> 0 */
 		line[strlen(line) - 1] = 0;
-		if (preload(line)) {
+		size_t size;
+		if (preload(line, &size)) {
 			fprintf(stderr, "Failed to preload '%s'\n", line);
 		} else {
-			fprintf(stderr, "Preloaded '%s'\n", line);
+			if (verbose) {
+				fprintf(stderr, "Preloaded '%s'\n", line);
+			}
+			total += size;
+			loaded++;
 		}
+		attempted++;
+		/*
+		 * In case the active IO scheduler doesn't already make us yield
+		 * to other processes
+		 */
+		usleep(1000);
 	}
 
-	fprintf(stderr, "Done\n");
+	fprintf(stderr, "Done, preloaded %lu/%lu files (%lluMB)\n", loaded, attempted, (long long unsigned int) (total >> 20));
 
 	while (!end) {
-		sleep(86400);
+		sleep(-1);
 	}
+
+	fprintf(stderr, "Unloading\n");
+	unload();
+	fprintf(stderr, "Unloaded\n");
 
 	return 0;
 }
