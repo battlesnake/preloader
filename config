@@ -1,0 +1,78 @@
+declare -ri max_file_size=30*1048576
+
+declare -r base_dir="/etc/preloader"
+
+declare -ra exclude_ext=(
+	avi mpg mpeg mp? m?v m?a og? flac vob mkv wav riff mov h26?
+	nef raw
+	gz bz2 xz 7z lzma tar zip rar cab
+)
+
+declare -ra exclude=(
+	'^/(boot|proc|sys|dev|run)/'
+	'incomplete|\.!|~'
+	'^\./'
+	'/etc/(passwd|shadow|group)'
+	'xauth'
+)
+
+################################################################################
+
+if [ -e "${base_dir}/config" ]; then
+	source "${base_dir}/config"
+fi
+
+declare list_dir="${base_dir}/lists"
+
+if ! [ -e "${base_dir}" ]; then
+	sudo mkdir -p "${base_dir}"
+	sudo mkdir -p "${list_dir}"
+fi
+
+# Security problem: any user could add a massive load of data to the preload
+# list, causing the preloader to trigger an OOM.  We could add a
+# "max_payload_size" config var to get around this.
+if ! [ -w "${list_dir}" -a -r "${list_dir}" -a -x "${list_dir}" ]; then
+	sudo chmod -R 777 "${list_dir}"
+fi
+
+function join_array {
+	# Delim cannot contain '%'
+	local delim="$1"
+	shift
+	if (( $# == 0 )); then
+		return
+	fi
+	printf -- "%s" "$1"
+	shift
+	printf -- "${delim}%s" "$@"
+}
+
+function get_filter_rx {
+	local rx=''
+	rx+="$(join_array '|' "${exclude_ext[@]}" | sed -e 's/?/./g;s/\*/.*/g'; printf '$')"
+	rx+="|$(join_array '|' "${exclude[@]}")"
+	printf -- "%s" "${rx}" | sed -e 's/\//\\\//g'
+}
+
+declare -r exclude_rx="$(get_filter_rx)"
+
+function glue_prog {
+cat <<EOF
+	use strict;
+	use warnings;
+	use feature qw(say);
+	my \$rx = qr/${exclude_rx}/;
+EOF
+cat <<'EOF'
+	while (<>) {
+		if (/open\(\s*"([^"]+)"(?:\s*,\s*([\w|]+)(?:\s*,\s*(\d+)?)?)\s*\)\s*=\s*(-?\d+)/) {
+			my $path = $1;
+			my $mode = $2 // "<unspecified>";
+			my $permission = $3 // "<unspecified>";
+			my $res = $4;
+			say $path if ($res >= 1 and $path !~ $rx);
+		}
+	}
+EOF
+}
