@@ -6,11 +6,16 @@ declare -ra exclude_ext=(
 	avi mpg mpeg mp? m?v m?a og? flac vob mkv wav riff mov h26?
 	nef raw
 	gz bz2 xz 7z lzma tar zip rar cab
+	lock log
+	'~*'
 )
 
 declare -ra exclude=(
 	'^/(boot|proc|sys|dev|run)/'
 	'incomplete|\.!|~'
+	'/Cache'
+	'\.tmp$'
+	'~$'
 	'^\./'
 	'/etc/(passwd|shadow|group)'
 	'xauth'
