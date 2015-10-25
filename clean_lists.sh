@@ -6,7 +6,7 @@ declare -r tmp="$(mktemp)"
 
 cd "$(dirname "$0")"
 
-source "$(dirname "$0")/config"
+source "config"
 
 declare -i count=0
 
