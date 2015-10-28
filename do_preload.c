@@ -1,5 +1,6 @@
 #if 0
 set -euo pipefail
+rm -f do_preload
 gcc -O0 -g -mtune=generic -Wall -fstack-protector-all "$0" -o do_preload
 echo 'Compiled!'
 exit
@@ -13,6 +14,7 @@ exit
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/errno.h>
 #include <signal.h>
 
 struct t_mapping
@@ -41,26 +43,64 @@ void push_ptr(void *ptr, size_t size)
 	this->size = size;
 }
 
+void print_mlock_error(char *path, int code)
+{
+	char *error;
+	switch (code) {
+	case ENOMEM:
+		error = "Cannot lock more pages, limit reached";
+		break;
+	case EPERM:
+		error = "Required permission missing";
+		break;
+	case EAGAIN:
+		error = "Failed to lock entire range";
+		break;
+	case EINVAL:
+		error = "Invalid parameter to mlock";
+		break;
+	default:
+		error = "Unknown error";
+		break;
+	}
+	fprintf(stderr, "Failed to lock \"%s\": %s (%d)\n", path, error, code);
+}
+
 int preload(char *path, size_t *size)
 {
 	int file = open(path, O_RDONLY);
 	struct stat statrec;
 	if (file < 0) {
+		fprintf(stderr, "Failed to open file \"%s\" (%d)\n", path, errno);
 		return 1;
 	}
-	if (fstat(file, &statrec)) {
+	if (fstat(file, &statrec) != 0) {
 		close(file);
+		fprintf(stderr, "Failed to stat file \"%s\" (%d)\n", path, errno);
 		return 2;
 	}
-	void *map = mmap(NULL, statrec.st_size, PROT_READ | PROT_EXEC,
-		MAP_SHARED | MAP_LOCKED | MAP_POPULATE, file, 0);
+	size_t length = statrec.st_size;
+	if (length == 0) {
+		close(file);
+		fprintf(stderr, "Skipping empty file \"%s\"\n", path);
+		return 0;
+	}
+	void *map = mmap(NULL, length, PROT_READ | PROT_EXEC,
+		MAP_SHARED, file, 0);
 	if (map == MAP_FAILED) {
 		close(file);
+		fprintf(stderr, "Failed to map file \"%s\" (%d)\n", path, errno);
 		return 3;
 	}
+	int mlock_error = mlock(map, length);
+	if (mlock_error != 0) {
+		close(file);
+		print_mlock_error(path, errno);
+		return 4;
+	}
 	close(file);
-	push_ptr(map, statrec.st_size);
-	*size = statrec.st_size;
+	push_ptr(map, length);
+	*size = length;
 	return 0;
 }
 
@@ -104,9 +144,7 @@ int main(int argc, char *argv[])
 		/* \n -> 0 */
 		line[strlen(line) - 1] = 0;
 		size_t size;
-		if (preload(line, &size)) {
-			fprintf(stderr, "Failed to preload '%s'\n", line);
-		} else {
+		if (preload(line, &size) == 0) {
 			if (verbose) {
 				fprintf(stderr, "Preloaded '%s'\n", line);
 			}

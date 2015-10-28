@@ -12,7 +12,7 @@ declare -i count=0
 
 function clean_list {
 	while read line; do
-		if [ "${line:0:1}" == '#' ] || [ -z "${line}" ] || [ -e "${line}" ]; then
+		if [ "${line:0:1}" == '#' ] || [ -z "${line}" ] || ([ -f "${line}" ] && ! is_excluded "${line}" ); then
 			printf -- "%s\n" "${line}"
 		else
 			printf >&2 -- " * %s\n" "${line}"

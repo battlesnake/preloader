@@ -6,12 +6,12 @@ declare -ra exclude_ext=(
 	avi mpg mpeg mp? m?v m?a og? flac vob mkv wav riff mov h26?
 	nef raw
 	gz bz2 xz 7z lzma tar zip rar cab
-	lock log
+	lock lck log
 	'~*'
 )
 
 declare -ra exclude=(
-	'^/(boot|proc|sys|dev|run)/'
+	'^/(boot|proc|sys|dev|run|tmp)/'
 	'incomplete|\.!|~'
 	'/Cache'
 	'\.tmp$'
@@ -19,6 +19,7 @@ declare -ra exclude=(
 	'^\./'
 	'/etc/(passwd|shadow|group)'
 	'xauth'
+	'/(lock|LOCK)$'
 )
 
 ################################################################################
@@ -80,4 +81,20 @@ cat <<'EOF'
 		}
 	}
 EOF
+}
+
+function is_excluded {
+	echo "$@" | perl <(
+cat <<EOF
+	use strict;
+	use warnings;
+	my \$rx = qr/${exclude_rx}/;
+EOF
+cat <<'EOF'
+	while (<>) {
+		exit(0) if ($_ =~ $rx);
+	}
+	exit(1);
+EOF
+	)
 }
