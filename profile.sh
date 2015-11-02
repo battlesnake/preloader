@@ -92,11 +92,12 @@ while read file; do
 	fi
 	total+=size
 	count+=1
-done < "${tmpfile2}"
+	printf -- "%s\n" "${file}"
+done < "${tmpfile2}" > "${tmpfile}"
 
 # Don't bother storing list if the payload is empty
 if (( count > 0 )); then
-	mv -- "${tmpfile2}" "${list_file}"
+	mv -- "${tmpfile}" "${list_file}"
 	chmod 644 "${list_file}"
 else
 	rm -f -- "${list_file}"
