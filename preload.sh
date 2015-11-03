@@ -6,6 +6,11 @@ cd "$(dirname "$0")"
 
 source "config"
 
+if uname -r | grep -qE '-server$'; then
+	printf >&2 -- "Not preloading as we're running the server kernel\n"
+	exit
+fi
+
 function get_payload {
 	cat -- "${list_dir}"/*.list | grep -vE '^#' | sort -u
 }
