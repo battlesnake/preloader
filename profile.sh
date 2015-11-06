@@ -66,22 +66,18 @@ fi
 		printf -- "'"
 	done
 	printf -- "\n"
-# Build file list from strace output
-	perl <(glue_prog) "${tmpfile}" | xargs -I{} readlink -m {} | sort -u
+# Build file list from strace output, storing symlinks and their target, in case the target changes (e.g. libs)
+	perl <(glue_prog) "${tmpfile}" | xargs -I{} sh -c 'echo {}; readlink -m {}' | sort -u
 } > "${tmpfile2}"
 
-# Calculate payload size
-declare -i total=0
-declare -i count=0
+# Filter list
 while read file; do
 	if [ "${file:0:1}" == "#" ]; then
-		continue
-	fi
-	if [ -d "${file}" ]; then
+		true
+	elif [ -d "${file}" ]; then
 #		printf >&2 -- "Excluding directory %s\n" "${file}"
 		continue
-	fi
-	if ! [ -e "${file}" ]; then
+	elif ! [ -e "${file}" ]; then
 #		printf >&2 -- "Excluding transient file %s\n" "${file}"
 		continue
 	fi
@@ -90,10 +86,20 @@ while read file; do
 		printf >&2 -- "Excluding large file %s\n" "${file}"
 		continue
 	fi
-	total+=size
-	count+=1
 	printf -- "%s\n" "${file}"
 done < "${tmpfile2}" > "${tmpfile}"
+
+# Calculate payload size, avoiding duplicates caused by symlinks
+declare -i total=0
+declare -i count=0
+while read file; do
+	if [ "${file:0:1}" == "#" ]; then
+		continue
+	fi
+	declare -i size="$(stat -c%s "${file}" 2>/dev/null)"
+	total+=size
+	count+=1
+done < <(<"${tmpfile}" xargs -I{} readlink -m {} | sort -u)
 
 # Don't bother storing list if the payload is empty
 if (( count > 0 )); then

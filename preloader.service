@@ -1,0 +1,10 @@
+[Unit]
+Description=Preloader
+Wants=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /root/bin/preloader/preload.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -12,7 +12,7 @@ if uname -r | grep -qE '-server$'; then
 fi
 
 function get_payload {
-	cat -- "${list_dir}"/*.list | grep -vE '^#' | sort -u
+	cat -- "${list_dir}"/*.list | grep -vE '^#|^$' | xargs -I{} readlink -m {} | sort -u
 }
 
 function calc_size {
