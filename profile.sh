@@ -84,6 +84,7 @@ while read file; do
 	declare -i size="$(stat -c%s "${file}" 2>/dev/null)"
 	if (( size > max_file_size )); then
 		printf >&2 -- "Excluding large file %s\n" "${file}"
+		printf -- "# %s\n" "${file}"
 		continue
 	fi
 	printf -- "%s\n" "${file}"
