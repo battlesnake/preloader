@@ -67,7 +67,12 @@ fi
 	done
 	printf -- "\n"
 # Build file list from strace output, storing symlinks and their target, in case the target changes (e.g. libs)
-	perl <(glue_prog) "${tmpfile}" | xargs -I{} sh -c 'echo {}; readlink -m {}' | sort -u
+	perl <(glue_prog) "${tmpfile}" \
+	| while IFS='' read line; do
+		printf -- "%s\n" "${line}"
+		readlink -m "${line}"
+	done \
+	| sort -u
 } > "${tmpfile2}"
 
 # Filter list

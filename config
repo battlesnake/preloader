@@ -1,4 +1,4 @@
-declare -ri max_file_size=50*1048576
+declare -ri max_file_size=100*1048576
 
 declare -r base_dir="/etc/preloader"
 
