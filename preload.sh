@@ -4,6 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Don't slow down the boot process, start preloading after
+if [ "${1:-}" == "boot" ]; then
+	sleep 30
+fi
+
 source "config"
 
 if uname -r | grep -qE '-server$'; then
