@@ -8,6 +8,11 @@ declare run_as_user=
 declare profile_name=
 declare -i run_in_foreground=0
 
+if ! [ -e /usr/bin/strace ]; then
+	printf >&2 "strace required!\n"
+	false
+fi
+
 while true; do
 	case "$1" in
 	-u) shift; run_as_user="$1";;
@@ -57,6 +62,8 @@ else
 	kill "${strace_pid}" &>/dev/null || true
 fi
 
+printf >&2 -- "Generating file list\n"
+
 {
 # Store command line in a comment
 	printf -- "#"
@@ -79,6 +86,8 @@ fi
 	} | sort -u
 } > "${tmpfile2}"
 
+printf >&2 -- "Filtering file list\n"
+
 # Filter list
 while read file; do
 	if [ "${file:0:1}" == "#" ]; then
@@ -98,6 +107,8 @@ while read file; do
 	fi
 	printf -- "%s\n" "${file}"
 done < "${tmpfile2}" > "${tmpfile}"
+
+printf >&2 -- "Analysing file list\n"
 
 # Calculate payload size, avoiding duplicates caused by symlinks
 declare -i total=0
