@@ -9,6 +9,7 @@ exit
 #include <stdlib.h>
 #include <stdio.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -111,6 +112,25 @@ void unload()
 	}
 }
 
+uint64_t loltato = 0;
+
+void touch()
+{
+	for (size_t i = 0; i < n_ptrs; i++) {
+		uint8_t *p = (uint8_t *) ptrs[i].ptr;
+		size_t len = ptrs[i].size;
+		size_t j = 0;
+		while (j + 8 < len) {
+			loltato ^= *(uint64_t *) &p[j];
+			j += 8;
+		}
+		while (j < len) {
+			loltato ^= p[j];
+			j++;
+		}
+	}
+}
+
 #define linebuf 4096
 
 volatile sig_atomic_t end = 0;
@@ -158,6 +178,8 @@ int main(int argc, char *argv[])
 		 */
 		usleep(1000);
 	}
+
+	touch();
 
 	fprintf(stderr, "Done, preloaded %lu/%lu files (%lluMB)\n", loaded, attempted, (long long unsigned int) (total >> 20));
 
